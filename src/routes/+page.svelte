@@ -14,6 +14,12 @@
     let analysisProgress = "";
     let error = "";
     let showDetailedResults = false;
+    let expandedSections = {
+        passed: false,
+        warnings: false,
+        errors: false,
+    };
+    let expandedRules = new Set();
 
     onMount(() => {
         const savedKey = localStorage.getItem("apiKey");
@@ -104,90 +110,176 @@
                     <p>{analysisResult}</p>
 
                     {#if Object.keys(rulesAnalysisResults).length > 0}
+                        {@const passedRules = Object.entries(rulesAnalysisResults).filter(
+                            ([_, result]) => result.decision,
+                        )}
+                        {@const failedRules = Object.entries(rulesAnalysisResults).filter(
+                            ([_, result]) => !result.decision,
+                        )}
+                        {@const warningRules = []}
+                        <!-- Placeholder for future warning rules -->
+
                         <div class="rules-results">
                             <div class="results-header">
                                 <h4>Rule Analysis Results:</h4>
-                                <div class="results-controls">
-                                    <button
-                                        class="toggle-btn"
-                                        on:click={() => (showDetailedResults = !showDetailedResults)}
-                                    >
-                                        {showDetailedResults ? "Hide Details" : "Show Details"}
-                                    </button>
-                                    <button
-                                        class="export-btn"
-                                        on:click={() => {
-                                            const exportData = {
-                                                timestamp: new Date().toISOString(),
-                                                results: rulesAnalysisResults,
-                                                summary: {
-                                                    passed: Object.values(rulesAnalysisResults).filter(
-                                                        (r) => r.decision,
-                                                    ).length,
-                                                    total: Object.keys(rulesAnalysisResults).length,
-                                                },
-                                            };
-                                            const blob = new Blob([JSON.stringify(exportData, null, 2)], {
-                                                type: "application/json",
-                                            });
-                                            const url = URL.createObjectURL(blob);
-                                            const a = document.createElement("a");
-                                            a.href = url;
-                                            a.download = `analysis-results-${new Date().toISOString().split("T")[0]}.json`;
-                                            a.click();
-                                            URL.revokeObjectURL(url);
-                                        }}
-                                    >
-                                        Export Results
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div class="rules-info">
-                                <h5>Rules Being Checked:</h5>
-                                <ul>
-                                    {#each rules as rule}
-                                        <li>
-                                            <strong>{rule.name}:</strong>
-                                            {rule.instruction}
-                                        </li>
-                                    {/each}
-                                </ul>
+                                <button
+                                    class="export-btn"
+                                    on:click={() => {
+                                        const exportData = {
+                                            timestamp: new Date().toISOString(),
+                                            results: rulesAnalysisResults,
+                                            summary: {
+                                                passed: passedRules.length,
+                                                warnings: warningRules.length,
+                                                errors: failedRules.length,
+                                                total: Object.keys(rulesAnalysisResults).length,
+                                            },
+                                        };
+                                        const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+                                            type: "application/json",
+                                        });
+                                        const url = URL.createObjectURL(blob);
+                                        const a = document.createElement("a");
+                                        a.href = url;
+                                        a.download = `analysis-results-${new Date().toISOString().split("T")[0]}.json`;
+                                        a.click();
+                                        URL.revokeObjectURL(url);
+                                    }}
+                                >
+                                    Export Results
+                                </button>
                             </div>
 
                             <div class="summary">
                                 <strong>
-                                    Summary: {Object.values(rulesAnalysisResults).filter((r) => r.decision)
-                                        .length}/{Object.keys(rulesAnalysisResults).length} rules passed
+                                    Summary: {passedRules.length} passed, {warningRules.length} warnings, {failedRules.length}
+                                    errors out of {Object.keys(rulesAnalysisResults).length} total rules
                                 </strong>
                             </div>
 
-                            {#if showDetailedResults}
-                                <div class="detailed-results">
-                                    {#each Object.entries(rulesAnalysisResults) as [ruleName, result]}
-                                        <div class="rule-result {result.decision ? 'pass' : 'fail'}">
-                                            <div class="rule-header">
-                                                <h5>{ruleName}</h5>
-                                                <span class="status-badge {result.decision ? 'pass' : 'fail'}">
-                                                    {result.decision ? "✅ PASS" : "❌ FAIL"}
-                                                </span>
+                            <div class="categorized-results">
+                                <!-- Passed Rules Section -->
+                                {#if passedRules.length > 0}
+                                    <div class="result-section passed">
+                                        <button
+                                            class="section-header"
+                                            on:click={() => (expandedSections.passed = !expandedSections.passed)}
+                                        >
+                                            <span class="section-icon">{expandedSections.passed ? "▼" : "▶"}</span>
+                                            <span class="section-title">✅ Passed ({passedRules.length})</span>
+                                        </button>
+                                        {#if expandedSections.passed}
+                                            <div class="section-content">
+                                                {#each passedRules as [ruleName, result]}
+                                                    {@const ruleFromList = rules.find((r) => r.name === ruleName)}
+                                                    <div class="rule-item">
+                                                        <button
+                                                            class="rule-header"
+                                                            on:click={() => {
+                                                                if (expandedRules.has(ruleName)) {
+                                                                    expandedRules.delete(ruleName);
+                                                                } else {
+                                                                    expandedRules.add(ruleName);
+                                                                }
+                                                                expandedRules = new Set(expandedRules);
+                                                            }}
+                                                        >
+                                                            <span class="expand-icon"
+                                                                >{expandedRules.has(ruleName) ? "▼" : "▶"}</span
+                                                            >
+                                                            <span class="rule-name">{ruleName}</span>
+                                                            <span class="status-badge pass">✅ PASS</span>
+                                                        </button>
+                                                        {#if expandedRules.has(ruleName)}
+                                                            <div class="rule-details">
+                                                                <div class="rule-instruction">
+                                                                    <strong>Rule:</strong>
+                                                                    {ruleFromList?.instruction ||
+                                                                        "No instruction available"}
+                                                                </div>
+                                                                <div class="rule-justification">
+                                                                    <strong>Justification:</strong>
+                                                                    {result.justification}
+                                                                </div>
+                                                            </div>
+                                                        {/if}
+                                                    </div>
+                                                {/each}
                                             </div>
-                                            <p class="justification">{result.justification}</p>
-                                        </div>
-                                    {/each}
-                                </div>
-                            {:else}
-                                <div class="compact-results">
-                                    {#each Object.entries(rulesAnalysisResults) as [ruleName, result]}
-                                        <div class="compact-rule">
-                                            <span class="rule-name">{ruleName}</span>
-                                            <span class="status-badge {result.decision ? 'pass' : 'fail'}">
-                                                {result.decision ? "✅ PASS" : "❌ FAIL"}
-                                            </span>
-                                        </div>
-                                    {/each}
-                                </div>
-                            {/if}
+                                        {/if}
+                                    </div>
+                                {/if}
+
+                                <!-- Warning Rules Section (placeholder for future) -->
+                                {#if warningRules.length > 0}
+                                    <div class="result-section warnings">
+                                        <button
+                                            class="section-header"
+                                            on:click={() => (expandedSections.warnings = !expandedSections.warnings)}
+                                        >
+                                            <span class="section-icon">{expandedSections.warnings ? "▼" : "▶"}</span>
+                                            <span class="section-title">⚠️ Warnings ({warningRules.length})</span>
+                                        </button>
+                                        {#if expandedSections.warnings}
+                                            <div class="section-content">
+                                                <!-- Warning rules will be displayed here when implemented -->
+                                            </div>
+                                        {/if}
+                                    </div>
+                                {/if}
+
+                                <!-- Failed Rules Section -->
+                                {#if failedRules.length > 0}
+                                    <div class="result-section errors">
+                                        <button
+                                            class="section-header"
+                                            on:click={() => (expandedSections.errors = !expandedSections.errors)}
+                                        >
+                                            <span class="section-icon">{expandedSections.errors ? "▼" : "▶"}</span>
+                                            <span class="section-title">❌ Errors ({failedRules.length})</span>
+                                        </button>
+                                        {#if expandedSections.errors}
+                                            <div class="section-content">
+                                                {#each failedRules as [ruleName, result]}
+                                                    {@const ruleFromList = rules.find((r) => r.name === ruleName)}
+                                                    <div class="rule-item">
+                                                        <button
+                                                            class="rule-header"
+                                                            on:click={() => {
+                                                                if (expandedRules.has(ruleName)) {
+                                                                    expandedRules.delete(ruleName);
+                                                                } else {
+                                                                    expandedRules.add(ruleName);
+                                                                }
+                                                                expandedRules = new Set(expandedRules);
+                                                            }}
+                                                        >
+                                                            <span class="expand-icon"
+                                                                >{expandedRules.has(ruleName) ? "▼" : "▶"}</span
+                                                            >
+                                                            <span class="rule-name">{ruleName}</span>
+                                                            <span class="status-badge fail">❌ FAIL</span>
+                                                        </button>
+                                                        {#if expandedRules.has(ruleName)}
+                                                            <div class="rule-details">
+                                                                <div class="rule-instruction">
+                                                                    <strong>Rule:</strong>
+                                                                    {ruleFromList?.instruction ||
+                                                                        "No instruction available"}
+                                                                </div>
+                                                                <div class="rule-justification">
+                                                                    <strong>Justification:</strong>
+                                                                    {result.justification}
+                                                                </div>
+                                                            </div>
+                                                        {/if}
+                                                    </div>
+                                                {/each}
+                                            </div>
+                                        {/if}
+                                    </div>
+                                {/if}
+                            </div>
                         </div>
                     {/if}
                 </div>

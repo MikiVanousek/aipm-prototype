@@ -15,4 +15,5 @@ export const rules = [
     "Reference Citation Style",
     "Ensure that all in-text citations use numbers enclosed in square brackets (e.g., [1], [2-4]) and that the reference list is numbered consecutively. Cross-check that every cited number appears in the reference list and that DOIs, when available, are provided as full links.",
   ),
+  new FormattingRule("Some Bold Text Required", "Make sure that at least some text in the document is bold."),
 ];
