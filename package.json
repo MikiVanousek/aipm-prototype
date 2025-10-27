@@ -17,6 +17,7 @@
     "vite": "^7.1.8"
   },
   "dependencies": {
+    "mammoth": "^1.11.0",
     "openai": "^6.3.0"
   }
 }
