@@ -1,0 +1,1 @@
+import"../chunks/DsnmJJEf.js";import"../chunks/BFy9s_2I.js";import{s as t,v as p,w as r}from"../chunks/Ceq9F14R.js";var a=t("<h1>About</h1> <p>Reload this page. You should see the same content.</p> <p>View the page source: the HTML is pre-rendered.</p>",1);function h(e){var o=a();r(4),p(e,o)}export{h as component};
