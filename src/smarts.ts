@@ -9,13 +9,18 @@ export type RuleAnalysisResult = {
 
 export class AIAnalyser {
   private client: OpenAI;
+  private parallelThreads: number;
 
-  constructor(private apiKey: string) {
+  constructor(
+    private apiKey: string,
+    parallelThreads: number = 8,
+  ) {
     this.client = new OpenAI({
       baseURL: "https://openrouter.ai/api/v1",
       apiKey: apiKey,
       dangerouslyAllowBrowser: true,
     });
+    this.parallelThreads = Math.max(1, parallelThreads);
   }
 
   async analyze(data: string): Promise<string> {
@@ -53,9 +58,13 @@ export class AIAnalyser {
   async analyzeRules(documentContent: string, rules: FormattingRule[]): Promise<Record<string, RuleAnalysisResult>> {
     const results: Record<string, RuleAnalysisResult> = {};
 
-    for (const rule of rules) {
-      try {
-        const analysisPrompt = `
+    // Process rules in batches with parallel execution
+    for (let i = 0; i < rules.length; i += this.parallelThreads) {
+      const batch = rules.slice(i, i + this.parallelThreads);
+
+      const batchPromises = batch.map(async (rule) => {
+        try {
+          const analysisPrompt = `
 Document Content:
 ${documentContent}
 
@@ -67,32 +76,57 @@ Please analyze whether the document follows this rule. Respond with a JSON objec
 - "justification": a clear explanation of why you made this decision
 
 Format your response as valid JSON only.
-        `.trim();
+          `.trim();
 
-        const response = await this.analyze(analysisPrompt);
+          const response = await this.analyze(analysisPrompt);
 
-        try {
-          const parsed = JSON.parse(response);
-          results[rule.name] = {
-            rule: rule.name,
-            decision: Boolean(parsed.decision),
-            justification: String(parsed.justification || "No justification provided"),
-          };
-        } catch (parseError) {
-          // Fallback if JSON parsing fails
-          results[rule.name] = {
-            rule: rule.name,
-            decision: false,
-            justification: `Failed to parse AI response: ${response}`,
+          try {
+            // Extract JSON from markdown code blocks if present
+            let jsonString = response.trim();
+            const jsonMatch = jsonString.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+            if (jsonMatch) {
+              jsonString = jsonMatch[1];
+            }
+
+            const parsed = JSON.parse(jsonString);
+            return {
+              ruleName: rule.name,
+              result: {
+                rule: rule.name,
+                decision: Boolean(parsed.decision),
+                justification: String(parsed.justification || "No justification provided"),
+              },
+            };
+          } catch (parseError) {
+            // Fallback if JSON parsing fails
+            return {
+              ruleName: rule.name,
+              result: {
+                rule: rule.name,
+                decision: false,
+                justification: `Failed to parse AI response: ${response}`,
+              },
+            };
+          }
+        } catch (error) {
+          return {
+            ruleName: rule.name,
+            result: {
+              rule: rule.name,
+              decision: false,
+              justification: `Error analyzing rule: ${error.message}`,
+            },
           };
         }
-      } catch (error) {
-        results[rule.name] = {
-          rule: rule.name,
-          decision: false,
-          justification: `Error analyzing rule: ${error.message}`,
-        };
-      }
+      });
+
+      // Wait for all promises in this batch to complete
+      const batchResults = await Promise.all(batchPromises);
+
+      // Add results to the main results object
+      batchResults.forEach(({ ruleName, result }) => {
+        results[ruleName] = result;
+      });
     }
 
     return results;
